@@ -93,6 +93,7 @@
 如果你希望真正每天自动拿到新热词，再额外配置：
 
 - `HOTWORDS_SOURCE_MANIFEST_URL`
+- `OPENAI_API_KEY`
 
 ## 环境变量说明
 
@@ -104,6 +105,62 @@
 - `HOTWORDS_SOURCE_MANIFEST_URL`
   - 外部清单地址
   - Vercel Cron 会从这里拿到最新首页和详情页
+- `OPENAI_API_KEY`
+  - 用于云端自动生成每日热词榜
+- `OPENAI_BASE_URL`
+  - 可选，OpenAI 兼容接口地址，默认 `https://api.openai.com/v1`
+- `HOTWORDS_MODEL`
+  - 可选，每日热词筛选所用模型，默认 `gpt-4.1-mini`
+- `BLOB_ACCESS`
+  - 可选，Blob 存储访问模式，当前项目默认 `private`
+
+## 云端自动生成每日热词
+
+当前版本已经内置每日热词生成接口：
+
+```text
+/api/generate-manifest
+```
+
+这个接口会：
+
+- 抓取多源 AI 新闻、博客、论文与技术社区信号
+- 按当前确认的热词筛选规则生成 TOP10
+- 排除模型名、产品名、公司名、版本号、人物名、纯新闻事件名
+- 尽量避免与术语库和历史热词高重复
+- 生成首页、详情页、术语数据所需的 manifest
+
+要让每天 12:00 的 `/api/cron-refresh` 自动使用它，请把环境变量设置为：
+
+```text
+HOTWORDS_SOURCE_MANIFEST_URL=https://你的域名/api/generate-manifest?secret=你的CRON_SECRET
+```
+
+例如：
+
+```text
+HOTWORDS_SOURCE_MANIFEST_URL=https://aiglossary-two.vercel.app/api/generate-manifest?secret=aiglossary_refresh_20260717
+```
+
+同时必须配置：
+
+```text
+OPENAI_API_KEY=你的模型 API Key
+```
+
+如果使用 OpenAI 兼容服务，也可以配置：
+
+```text
+OPENAI_BASE_URL=https://你的兼容接口/v1
+HOTWORDS_MODEL=你的模型名
+```
+
+配置完成后需要重新部署一次。手动测试顺序：
+
+```text
+https://你的域名/api/generate-manifest?secret=你的CRON_SECRET
+https://你的域名/api/cron-refresh?secret=你的CRON_SECRET
+```
 
 ## 本地同步种子文件
 
