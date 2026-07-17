@@ -19,6 +19,19 @@ const SEED_FILES = Object.freeze({
   termDetailData: "term-detail-data.seed.js"
 });
 
+export function getRuntimeEnvStatus() {
+  return {
+    hasBlobReadWriteToken: Boolean(process.env.BLOB_READ_WRITE_TOKEN?.trim()),
+    hasCronSecret: Boolean(process.env.CRON_SECRET?.trim()),
+    hasHotwordsSourceManifestUrl: Boolean(process.env.HOTWORDS_SOURCE_MANIFEST_URL?.trim())
+  };
+}
+
+function getBlobOptions(options) {
+  const token = process.env.BLOB_READ_WRITE_TOKEN?.trim();
+  return token ? { ...options, token } : options;
+}
+
 function seedPath(filename) {
   return path.join(process.cwd(), "public", filename);
 }
@@ -32,7 +45,7 @@ export async function readSeedAsset(kind) {
 }
 
 async function findBlobUrl(pathname) {
-  const result = await list({ prefix: pathname, limit: 10 });
+  const result = await list(getBlobOptions({ prefix: pathname, limit: 10 }));
   const target = result.blobs.find((item) => item.pathname === pathname);
   return target?.url || null;
 }
@@ -48,12 +61,12 @@ export async function readBlobAsset(pathname) {
 }
 
 export async function writeBlobAsset(pathname, body, contentType) {
-  return put(pathname, body, {
+  return put(pathname, body, getBlobOptions({
     access: "public",
     addRandomSuffix: false,
     contentType,
     allowOverwrite: true
-  });
+  }));
 }
 
 export async function getPublishedAsset(kind) {
