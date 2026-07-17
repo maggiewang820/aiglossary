@@ -1,8 +1,9 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { list, put } from "@vercel/blob";
+import { get, list, put } from "@vercel/blob";
 
 const BLOB_PREFIX = "ai-hotwords/";
+const DEFAULT_BLOB_ACCESS = "private";
 
 export const ASSET_KEYS = Object.freeze({
   homepage: `${BLOB_PREFIX}ai-hotwords-top10.html`,
@@ -23,13 +24,18 @@ export function getRuntimeEnvStatus() {
   return {
     hasBlobReadWriteToken: Boolean(process.env.BLOB_READ_WRITE_TOKEN?.trim()),
     hasCronSecret: Boolean(process.env.CRON_SECRET?.trim()),
-    hasHotwordsSourceManifestUrl: Boolean(process.env.HOTWORDS_SOURCE_MANIFEST_URL?.trim())
+    hasHotwordsSourceManifestUrl: Boolean(process.env.HOTWORDS_SOURCE_MANIFEST_URL?.trim()),
+    blobAccess: getBlobAccess()
   };
 }
 
 function getBlobOptions(options) {
   const token = process.env.BLOB_READ_WRITE_TOKEN?.trim();
   return token ? { ...options, token } : options;
+}
+
+function getBlobAccess() {
+  return process.env.BLOB_ACCESS?.trim() || DEFAULT_BLOB_ACCESS;
 }
 
 function seedPath(filename) {
@@ -53,16 +59,17 @@ async function findBlobUrl(pathname) {
 export async function readBlobAsset(pathname) {
   const url = await findBlobUrl(pathname);
   if (!url) return null;
-  const response = await fetch(url, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`Failed to fetch blob ${pathname}: ${response.status}`);
+  const result = await get(pathname, getBlobOptions({ access: getBlobAccess() }));
+  if (!result || result.statusCode === 404) return null;
+  if (result.statusCode !== 200 || !result.stream) {
+    throw new Error(`Failed to get blob ${pathname}: ${result.statusCode}`);
   }
-  return response.text();
+  return new Response(result.stream).text();
 }
 
 export async function writeBlobAsset(pathname, body, contentType) {
   return put(pathname, body, getBlobOptions({
-    access: "public",
+    access: getBlobAccess(),
     addRandomSuffix: false,
     contentType,
     allowOverwrite: true
