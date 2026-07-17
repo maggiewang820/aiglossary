@@ -1,0 +1,22 @@
+{
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/api/site"
+    },
+    {
+      "source": "/ai-hotwords-top10.html",
+      "destination": "/api/site"
+    },
+    {
+      "source": "/term-detail.html",
+      "destination": "/api/term-detail"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron-refresh",
+      "schedule": "0 4 * * *"
+    }
+  ]
+}
