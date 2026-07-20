@@ -212,7 +212,7 @@ ${rejectedTerms.join(", ") || "无"}
 近24-72小时多源信号：
 ${sourceBrief}
 
-请只返回 JSON，不要 Markdown。格式：
+请只返回 JSON，不要 Markdown。为了避免 AI 术语库重复，请返回 20 个按热度排序的候选，系统会自动过滤术语库已有词后取前 10 个非重复词发布。格式：
 {
   "date": "${date}",
   "publishedAt": "${publishedAt}",
@@ -260,8 +260,8 @@ ${sourceBrief}
 
 function normalizeItems(payload, date, { libraryTermKeys } = {}) {
   const items = Array.isArray(payload.items) ? payload.items : [];
-  if (items.length !== 10) {
-    throw new Error(`模型必须返回10个热词，当前为 ${items.length} 个`);
+  if (items.length < 10) {
+    throw new Error(`模型至少返回10个候选热词，当前为 ${items.length} 个`);
   }
   const normalizedItems = items.map((item, index) => ({
     rank: index + 1,
@@ -283,14 +283,28 @@ function normalizeItems(payload, date, { libraryTermKeys } = {}) {
     return item;
   });
 
+  let filteredItems = normalizedItems;
   if (libraryTermKeys) {
-    const duplicateTerms = findDuplicateLibraryTerms(normalizedItems, libraryTermKeys);
-    if (duplicateTerms.length) {
-      throw createDuplicateError(date, duplicateTerms);
-    }
+    filteredItems = normalizedItems.filter((item) => !libraryTermKeys.has(normalizeTermKey(item.english)));
   }
 
-  return normalizedItems;
+  const seen = new Set();
+  filteredItems = filteredItems.filter((item) => {
+    const key = normalizeTermKey(item.english);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  if (filteredItems.length < 10) {
+    const duplicateTerms = findDuplicateLibraryTerms(normalizedItems, libraryTermKeys || new Set());
+    throw createDuplicateError(date, duplicateTerms.length ? duplicateTerms : normalizedItems.map((item) => item.english));
+  }
+
+  return filteredItems.slice(0, 10).map((item, index) => ({
+    ...item,
+    rank: index + 1
+  }));
 }
 
 function toJsLiteral(value, indent = 10) {
@@ -406,7 +420,7 @@ export default async function handler(request, response) {
     let items = null;
     let rejectedTerms = [];
     let lastError = null;
-    for (let attempt = 1; attempt <= 5; attempt += 1) {
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
       try {
         const modelPayload = await callModel({ date, publishedAt, signals, glossaryTerms, recentHotwords, rejectedTerms });
         items = normalizeItems(modelPayload, date, { libraryTermKeys });
@@ -422,7 +436,7 @@ export default async function handler(request, response) {
     }
 
     if (!items) {
-      throw new Error(`连续生成5次仍与 AI 术语库重复，已拒绝发布：${lastError?.message || "未知错误"}`);
+      throw new Error(`连续生成2次仍无法得到10个非术语库重复候选，已拒绝发布：${lastError?.message || "未知错误"}`);
     }
 
     const assets = buildAssets({ date, publishedAt, items, homepage, detail, glossaryData, termDetailData });
