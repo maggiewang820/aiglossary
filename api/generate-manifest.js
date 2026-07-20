@@ -212,7 +212,7 @@ ${rejectedTerms.join(", ") || "无"}
 近24-72小时多源信号：
 ${sourceBrief}
 
-请只返回 JSON，不要 Markdown。为了避免 AI 术语库重复，请返回 20 个按热度排序的候选，系统会自动过滤术语库已有词后取前 10 个非重复词发布。格式：
+请只返回 JSON，不要 Markdown。格式：
 {
   "date": "${date}",
   "publishedAt": "${publishedAt}",
@@ -260,8 +260,8 @@ ${sourceBrief}
 
 function normalizeItems(payload, date, { libraryTermKeys } = {}) {
   const items = Array.isArray(payload.items) ? payload.items : [];
-  if (items.length < 10) {
-    throw new Error(`模型至少返回10个候选热词，当前为 ${items.length} 个`);
+  if (items.length !== 10) {
+    throw new Error(`模型必须返回10个热词，当前为 ${items.length} 个`);
   }
   const normalizedItems = items.map((item, index) => ({
     rank: index + 1,
@@ -283,28 +283,14 @@ function normalizeItems(payload, date, { libraryTermKeys } = {}) {
     return item;
   });
 
-  let filteredItems = normalizedItems;
   if (libraryTermKeys) {
-    filteredItems = normalizedItems.filter((item) => !libraryTermKeys.has(normalizeTermKey(item.english)));
+    const duplicateTerms = findDuplicateLibraryTerms(normalizedItems, libraryTermKeys);
+    if (duplicateTerms.length) {
+      throw createDuplicateError(date, duplicateTerms);
+    }
   }
 
-  const seen = new Set();
-  filteredItems = filteredItems.filter((item) => {
-    const key = normalizeTermKey(item.english);
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-
-  if (filteredItems.length < 10) {
-    const duplicateTerms = findDuplicateLibraryTerms(normalizedItems, libraryTermKeys || new Set());
-    throw createDuplicateError(date, duplicateTerms.length ? duplicateTerms : normalizedItems.map((item) => item.english));
-  }
-
-  return filteredItems.slice(0, 10).map((item, index) => ({
-    ...item,
-    rank: index + 1
-  }));
+  return normalizedItems;
 }
 
 function toJsLiteral(value, indent = 10) {
@@ -416,7 +402,6 @@ export default async function handler(request, response) {
     const glossaryTerms = extractTermsFromText(glossaryData);
     const libraryTermKeys = buildTermKeySet(glossaryTerms);
     const recentHotwords = extractRecentHotwords(termDetailData);
-
     let items = null;
     let rejectedTerms = [];
     let lastError = null;
