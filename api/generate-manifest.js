@@ -207,6 +207,8 @@ ${recentHotwords.join(", ")}
 上一轮因重复被拒绝的候选，本轮必须避开：
 ${rejectedTerms.join(", ") || "无"}
 
+如果你发现最热词已经在禁用清单中，不要改写大小写、增加全称或换同义表达来绕过；必须换成同一热点下更细颗粒、尚未入库的新术语、新缩写、新机制或新工作流。
+
 近24-72小时多源信号：
 ${sourceBrief}
 
@@ -239,10 +241,10 @@ ${sourceBrief}
     },
     body: JSON.stringify({
       model,
-      temperature: 0.2,
+      temperature: rejectedTerms.length ? 0.45 : 0.2,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: "你只输出可解析 JSON。你会严格遵守用户的筛选、去重、来源多样性与链接规则。" },
+        { role: "system", content: "你只输出可解析 JSON。你会严格遵守用户的筛选、去重、来源多样性与链接规则。凡是进入禁用清单或 AI 术语库已有词的候选，都必须换成非重复的新候选，不能用大小写、空格、连字符、括号全称或同义词绕过。" },
         { role: "user", content: prompt }
       ]
     })
@@ -404,7 +406,7 @@ export default async function handler(request, response) {
     let items = null;
     let rejectedTerms = [];
     let lastError = null;
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
+    for (let attempt = 1; attempt <= 5; attempt += 1) {
       try {
         const modelPayload = await callModel({ date, publishedAt, signals, glossaryTerms, recentHotwords, rejectedTerms });
         items = normalizeItems(modelPayload, date, { libraryTermKeys });
@@ -420,7 +422,7 @@ export default async function handler(request, response) {
     }
 
     if (!items) {
-      throw new Error(`连续生成3次仍与 AI 术语库重复，已拒绝发布：${lastError?.message || "未知错误"}`);
+      throw new Error(`连续生成5次仍与 AI 术语库重复，已拒绝发布：${lastError?.message || "未知错误"}`);
     }
 
     const assets = buildAssets({ date, publishedAt, items, homepage, detail, glossaryData, termDetailData });
