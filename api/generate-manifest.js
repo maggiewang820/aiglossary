@@ -212,7 +212,11 @@ ${rejectedTerms.join(", ") || "无"}
 近24-72小时多源信号：
 ${sourceBrief}
 
-请只返回 JSON，不要 Markdown。格式：
+请只返回 JSON，不要 Markdown。为了支持全自动发布，请在同一套筛选与排序规则下返回 20 个候选：
+- 前 10 个是你认为应该发布的 TOP10
+- 后 10 个是同一规则下的备选候选
+- 备选只用于当主榜命中术语库重复或自身重复时按原排序顺延补位，不得使用另一套标准
+格式：
 {
   "date": "${date}",
   "publishedAt": "${publishedAt}",
@@ -260,8 +264,8 @@ ${sourceBrief}
 
 function normalizeItems(payload, date, { libraryTermKeys } = {}) {
   const items = Array.isArray(payload.items) ? payload.items : [];
-  if (items.length !== 10) {
-    throw new Error(`模型必须返回10个热词，当前为 ${items.length} 个`);
+  if (items.length < 10) {
+    throw new Error(`模型至少返回10个热词候选，当前为 ${items.length} 个`);
   }
   const normalizedItems = items.map((item, index) => ({
     rank: index + 1,
@@ -283,14 +287,32 @@ function normalizeItems(payload, date, { libraryTermKeys } = {}) {
     return item;
   });
 
-  if (libraryTermKeys) {
-    const duplicateTerms = findDuplicateLibraryTerms(normalizedItems, libraryTermKeys);
-    if (duplicateTerms.length) {
-      throw createDuplicateError(date, duplicateTerms);
+  const filteredItems = [];
+  const duplicateTerms = [];
+  const seenTermKeys = new Set();
+  normalizedItems.forEach((item) => {
+    const key = normalizeTermKey(item.english);
+    if (!key) return;
+    if (libraryTermKeys?.has(key)) {
+      duplicateTerms.push(item.english);
+      return;
     }
+    if (seenTermKeys.has(key)) {
+      duplicateTerms.push(item.english);
+      return;
+    }
+    seenTermKeys.add(key);
+    filteredItems.push(item);
+  });
+
+  if (filteredItems.length < 10) {
+    throw createDuplicateError(date, duplicateTerms.length ? duplicateTerms : normalizedItems.map((item) => item.english));
   }
 
-  return normalizedItems;
+  return filteredItems.slice(0, 10).map((item, index) => ({
+    ...item,
+    rank: index + 1
+  }));
 }
 
 function toJsLiteral(value, indent = 10) {
