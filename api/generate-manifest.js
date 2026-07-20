@@ -157,8 +157,20 @@ function buildTermKeySet(terms) {
 
 function findDuplicateLibraryTerms(items, libraryTermKeys) {
   return items
-    .filter((item) => libraryTermKeys.has(normalizeTermKey(item.english)))
+    .filter((item) => isLibraryTermVariant(normalizeTermKey(item.english), libraryTermKeys))
     .map((item) => item.english);
+}
+
+function isLibraryTermVariant(termKey, libraryTermKeys) {
+  if (!termKey) return false;
+  if (libraryTermKeys.has(termKey)) return true;
+  for (const libraryKey of libraryTermKeys) {
+    if (!libraryKey || libraryKey.length < 6) continue;
+    if (termKey.startsWith(libraryKey) || termKey.endsWith(libraryKey) || termKey.includes(libraryKey)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function createDuplicateError(date, duplicateTerms) {
@@ -177,7 +189,7 @@ function findExcludedTerms(items) {
       const key = normalizeTermKey(item.english);
       if (!key) return true;
       if (blockedNameParts.some((part) => key.includes(part))) return true;
-      if (/\bgpt[- ]?\d/i.test(item.english)) return true;
+      if (/\bgpt(?:[- ]?[a-z0-9.]+)?\b/i.test(item.english)) return true;
       if (/\b(?:investments?|company|launch|news)\b/i.test(item.english)) return true;
       return false;
     })
@@ -322,7 +334,7 @@ function normalizeItems(payload, date, { libraryTermKeys } = {}) {
       excludedTerms.push(item.english);
       return;
     }
-    if (libraryTermKeys?.has(key)) {
+    if (isLibraryTermVariant(key, libraryTermKeys || new Set())) {
       duplicateTerms.push(item.english);
       return;
     }
