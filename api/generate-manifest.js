@@ -460,7 +460,7 @@ export default async function handler(request, response) {
     let items = null;
     let rejectedTerms = [];
     let lastError = null;
-    for (let attempt = 1; attempt <= 2; attempt += 1) {
+    for (let attempt = 1; attempt <= 1; attempt += 1) {
       try {
         const modelPayload = await callModel({ date, publishedAt, signals, glossaryTerms, recentHotwords, rejectedTerms });
         items = normalizeItems(modelPayload, date, { libraryTermKeys });
@@ -480,7 +480,7 @@ export default async function handler(request, response) {
     }
 
     if (!items) {
-      throw new Error(`连续生成2次仍无法得到10个非术语库重复候选，已拒绝发布：${lastError?.message || "未知错误"}`);
+      throw new Error(`本次生成未得到10个合格且非术语库重复候选，已拒绝发布：${lastError?.message || "未知错误"}`);
     }
 
     const assets = buildAssets({ date, publishedAt, items, homepage, detail, glossaryData, termDetailData });

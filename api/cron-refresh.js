@@ -1,4 +1,15 @@
-import { isAuthorized, publishAssets, resolveRefreshPayload } from "./_lib/content-store.js";
+import { isAuthorized, publishAssets, readSeedAsset, resolveRefreshPayload } from "./_lib/content-store.js";
+
+async function resolveForcedSeedPayload() {
+  return {
+    mode: "seed",
+    homepage: await readSeedAsset("homepage"),
+    detail: await readSeedAsset("detail"),
+    glossaryData: await readSeedAsset("glossaryData"),
+    termDetailData: await readSeedAsset("termDetailData"),
+    notes: "手动回滚到仓库种子版本"
+  };
+}
 
 export default async function handler(request, response) {
   if (!isAuthorized(request)) {
@@ -7,7 +18,9 @@ export default async function handler(request, response) {
   }
 
   try {
-    const payload = await resolveRefreshPayload();
+    const payload = request.query?.mode === "seed"
+      ? await resolveForcedSeedPayload()
+      : await resolveRefreshPayload();
     const result = await publishAssets(payload);
     response.status(200).json({
       ok: true,
