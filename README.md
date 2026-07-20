@@ -93,7 +93,7 @@
 如果你希望真正每天自动拿到新热词，再额外配置：
 
 - `HOTWORDS_SOURCE_MANIFEST_URL`
-- `OPENAI_API_KEY`
+- `OPENAI_API_KEY` 或 `ZHIPU_API_KEY`
 
 ## 环境变量说明
 
@@ -105,10 +105,12 @@
 - `HOTWORDS_SOURCE_MANIFEST_URL`
   - 外部清单地址
   - Vercel Cron 会从这里拿到最新首页和详情页
-- `OPENAI_API_KEY`
-  - 用于云端自动生成每日热词榜
+- `OPENAI_API_KEY` / `AI_API_KEY` / `ZHIPU_API_KEY`
+  - 用于云端自动生成每日热词榜，三者任选其一即可
 - `OPENAI_BASE_URL`
   - 可选，OpenAI 兼容接口地址，默认 `https://api.openai.com/v1`
+- `ZHIPU_BASE_URL`
+  - 可选，智谱 OpenAI 兼容接口地址；如果配置了它，代码会优先使用智谱兼容接口
 - `HOTWORDS_MODEL`
   - 可选，每日热词筛选所用模型，默认 `gpt-4.1-mini`
 - `BLOB_ACCESS`
@@ -146,6 +148,14 @@ HOTWORDS_SOURCE_MANIFEST_URL=https://aiglossary-two.vercel.app/api/generate-mani
 
 ```text
 OPENAI_API_KEY=你的模型 API Key
+```
+
+如果使用智谱，也可以配置：
+
+```text
+ZHIPU_API_KEY=你的智谱 API Key
+ZHIPU_BASE_URL=https://open.bigmodel.cn/api/paas/v4
+HOTWORDS_MODEL=glm-4.7-flash
 ```
 
 如果使用 OpenAI 兼容服务，也可以配置：

@@ -125,12 +125,12 @@ function safeJsonParse(text) {
 }
 
 async function callModel({ date, publishedAt, signals, glossaryTerms, recentHotwords }) {
-  const apiKey = process.env.OPENAI_API_KEY || process.env.AI_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY || process.env.AI_API_KEY || process.env.ZHIPU_API_KEY;
   if (!apiKey) {
-    throw new Error("缺少 OPENAI_API_KEY 或 AI_API_KEY，无法云端生成每日热词");
+    throw new Error("缺少 OPENAI_API_KEY、AI_API_KEY 或 ZHIPU_API_KEY，无法云端生成每日热词");
   }
 
-  const baseUrl = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
+  const baseUrl = (process.env.OPENAI_BASE_URL || process.env.ZHIPU_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
   const model = process.env.HOTWORDS_MODEL || process.env.OPENAI_MODEL || "gpt-4.1-mini";
   const sourceBrief = signals.slice(0, 120).map((item, index) =>
     `${index + 1}. [${item.source}｜权重${item.weight}] ${item.title}\n${item.summary}\n${item.link}`

@@ -25,6 +25,16 @@ export function getRuntimeEnvStatus() {
     hasBlobReadWriteToken: Boolean(process.env.BLOB_READ_WRITE_TOKEN?.trim()),
     hasCronSecret: Boolean(process.env.CRON_SECRET?.trim()),
     hasHotwordsSourceManifestUrl: Boolean(process.env.HOTWORDS_SOURCE_MANIFEST_URL?.trim()),
+    hasModelApiKey: Boolean(
+      process.env.OPENAI_API_KEY?.trim() ||
+      process.env.AI_API_KEY?.trim() ||
+      process.env.ZHIPU_API_KEY?.trim()
+    ),
+    hasModelBaseUrl: Boolean(
+      process.env.OPENAI_BASE_URL?.trim() ||
+      process.env.ZHIPU_BASE_URL?.trim()
+    ),
+    hotwordsModel: process.env.HOTWORDS_MODEL || process.env.OPENAI_MODEL || "",
     blobAccess: getBlobAccess()
   };
 }
