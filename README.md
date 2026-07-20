@@ -30,7 +30,7 @@
 1. Vercel 负责“定时发布”
 2. 上游数据源负责“生成当天新榜单”
 
-也就是说，Vercel 已经能做到每天中午自动跑一次，但它是否能产出“全新的当天热词”，取决于是否配置了外部生成源。
+也就是说，Vercel 已经能做到每天早上 9 点自动跑一次，但它是否能产出“全新的当天热词”，取决于是否配置了外部生成源。
 
 ### 默认行为
 
@@ -73,9 +73,9 @@
 
 `vercel.json` 当前配置为：
 
-- `0 4 * * *`
+- `0 1 * * *`
 
-这是按 UTC 计算，对应北京时间每天 `12:00`。
+这是按 UTC 计算，对应北京时间每天 `09:00`。
 
 ## 部署步骤
 
@@ -130,7 +130,7 @@
 - 尽量避免与术语库和历史热词高重复
 - 生成首页、详情页、术语数据所需的 manifest
 
-要让每天 12:00 的 `/api/cron-refresh` 自动使用它，请把环境变量设置为：
+要让每天 09:00 的 `/api/cron-refresh` 自动使用它，请把环境变量设置为：
 
 ```text
 HOTWORDS_SOURCE_MANIFEST_URL=https://你的域名/api/generate-manifest?secret=你的CRON_SECRET
@@ -220,8 +220,8 @@ npm run sync:seed
 ```json
 {
   "path": "/api/cron-refresh",
-  "schedule": "0 4 * * *"
+  "schedule": "0 1 * * *"
 }
 ```
 
-Vercel Cron 使用 UTC 时间，因此 `0 4 * * *` 对应北京时间每天 12:00。
+Vercel Cron 使用 UTC 时间，因此 `0 1 * * *` 对应北京时间每天 09:00。
