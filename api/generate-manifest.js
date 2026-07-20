@@ -167,6 +167,29 @@ function createDuplicateError(date, duplicateTerms) {
   return error;
 }
 
+function findExcludedTerms(items) {
+  const blockedNameParts = [
+    "openai", "anthropic", "google", "deepmind", "meta", "nvidia", "huggingface", "microsoft",
+    "apple", "amazon", "deutschetelekom", "chatgpt", "claude", "gemini", "copilot"
+  ];
+  return items
+    .filter((item) => {
+      const key = normalizeTermKey(item.english);
+      if (!key) return true;
+      if (blockedNameParts.some((part) => key.includes(part))) return true;
+      if (/\bgpt[- ]?\d/i.test(item.english)) return true;
+      if (/\b(?:investments?|company|launch|news)\b/i.test(item.english)) return true;
+      return false;
+    })
+    .map((item) => item.english);
+}
+
+function createExcludedTermError(date, excludedTerms) {
+  const error = new Error(`${date} 热词包含模型名、产品名、公司名或非术语项：${excludedTerms.join(", ")}`);
+  error.excludedTerms = excludedTerms;
+  return error;
+}
+
 function extractRecentHotwords(text, limit = 80) {
   return extractTermsFromText(text).slice(-limit);
 }
@@ -289,10 +312,16 @@ function normalizeItems(payload, date, { libraryTermKeys } = {}) {
 
   const filteredItems = [];
   const duplicateTerms = [];
+  const excludedTerms = [];
   const seenTermKeys = new Set();
   normalizedItems.forEach((item) => {
     const key = normalizeTermKey(item.english);
     if (!key) return;
+    const excluded = findExcludedTerms([item]);
+    if (excluded.length) {
+      excludedTerms.push(item.english);
+      return;
+    }
     if (libraryTermKeys?.has(key)) {
       duplicateTerms.push(item.english);
       return;
@@ -306,7 +335,11 @@ function normalizeItems(payload, date, { libraryTermKeys } = {}) {
   });
 
   if (filteredItems.length < 10) {
-    throw createDuplicateError(date, duplicateTerms.length ? duplicateTerms : normalizedItems.map((item) => item.english));
+    const rejected = [...duplicateTerms, ...excludedTerms];
+    if (excludedTerms.length) {
+      throw createExcludedTermError(date, rejected.length ? rejected : normalizedItems.map((item) => item.english));
+    }
+    throw createDuplicateError(date, rejected.length ? rejected : normalizedItems.map((item) => item.english));
   }
 
   return filteredItems.slice(0, 10).map((item, index) => ({
@@ -434,8 +467,12 @@ export default async function handler(request, response) {
         break;
       } catch (error) {
         lastError = error;
-        if (Array.isArray(error.duplicateTerms) && error.duplicateTerms.length) {
-          rejectedTerms = Array.from(new Set([...rejectedTerms, ...error.duplicateTerms]));
+        const rejected = [
+          ...(Array.isArray(error.duplicateTerms) ? error.duplicateTerms : []),
+          ...(Array.isArray(error.excludedTerms) ? error.excludedTerms : [])
+        ];
+        if (rejected.length) {
+          rejectedTerms = Array.from(new Set([...rejectedTerms, ...rejected]));
           continue;
         }
         throw error;
