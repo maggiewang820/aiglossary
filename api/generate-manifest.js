@@ -10,17 +10,25 @@ const DISCOVERY_SOURCES = [
   { name: "Hugging Face Blog", url: "https://huggingface.co/blog/feed.xml", type: "rss", weight: 4 },
   { name: "InfoQ AI", url: "https://www.infoq.com/artificial-intelligence/rss/", type: "rss", weight: 3 },
   { name: "MIT AI News", url: "https://news.mit.edu/rss/topic/artificial-intelligence2", type: "rss", weight: 3 },
-  { name: "arXiv cs.AI", url: "https://export.arxiv.org/api/query?search_query=cat:cs.AI+OR+cat:cs.CL+OR+cat:cs.LG&sortBy=submittedDate&sortOrder=descending&max_results=25", type: "rss", weight: 3 }
+  { name: "arXiv cs.AI", url: "https://export.arxiv.org/api/query?search_query=cat:cs.AI+OR+cat:cs.CL+OR+cat:cs.LG&sortBy=submittedDate&sortOrder=descending&max_results=25", type: "rss", weight: 3 },
+  { name: "量子位", url: "https://www.qbitai.com/feed", type: "rss", weight: 3 },
+  { name: "InfoQ 中文", url: "https://www.infoq.cn/rss/", type: "rss", weight: 3 },
+  { name: "AIBase 中文", url: "https://news.aibase.cn/zh/news", type: "html", weight: 2 },
+  { name: "AIBase 热点", url: "https://www.aibase.cn/", type: "html", weight: 2 }
 ];
 
 const SCORING_RULES = `
-筛选目标：大众视角下近24小时真正值得关注的 AI 术语、缩写、机制、方法、工作流、评测、安全、检索、训练、推理、协议或系统概念。
-必须排除：模型名、产品名、公司名、版本号、人物名、纯新闻事件名。
-新鲜度：减少长期稳定术语；历史重复最多2个，且必须近24小时显著升温。
-来源多样性：TOP10 至少覆盖5个不同来源机构；同一机构最多2个词。
-定义链接：先选词，再找官方或权威定义链接；链接必须能直接支持该术语解释。
-展示：一句话解释不加句号；缩写类榜单名称优先用缩写；官方定义中写出英文全称；关联词必须来自现有术语库或本次TOP10。
-评分：综合覆盖来源数、出现频次、来源权威度、出现位置、术语属性权重，并归一化为 60-100。
+这套规则必须与旧版人工更新口径保持一致，Vercel 只是执行环境，不能改变筛选标准。
+候选发现：采用双层扫描。第一层为权威术语源、官方博客、技术文档、论文与标准组织，用于保证术语方向和概念边界；第二层为中文热点发现源，包括中文新闻站、社区、论坛、开源动态和行业媒体，用于发现当天突然升温的新术语、新缩写与新概念。
+中文热点规则：来自中文新闻站、社区、论坛和开源动态的候选词，至少要在 2 个及以上不同来源同时出现，才可进入候选池；只在单一帖子、单一媒体或单一讨论串中出现的词不入榜。
+候选范围：只收录 AI 术语、缩写、方法、机制、工作流、评测、安全、检索、训练与推理等概念；排除模型名、产品名、公司名、版本号、人物名与单纯新闻事件名。
+术语库去重：TOP10 绝对不能包含 AI 术语库中已经存在的术语；同义词、大小写变体、空格/连字符变体、缩写加全称变体都按同一术语处理。
+来源多样性：单日 TOP10 至少覆盖 5 个不同来源机构；同一机构最多入榜 3 个词；同一主题簇最多入榜 2 个词。
+新鲜度：不再使用硬性的历史重复率限制，而是对与昨天、近 3 天、近 7 天重复的术语分别做轻惩罚；如果某个词今天依然明显更热，允许继续入榜。若与前一天完全相同的词超过 5 个，则继续寻找同热度层级下更能代表今天新变化的候选词。
+定义链接：每个词必须绑定一个可直接打开、且页面正文能直接定位到该术语定义的权威链接。中文热点源只负责发现候选词，不直接作为最终定义链接；最终链接优先落到官方文档、研究页、技术词汇表、高校或标准组织权威解释。
+链接终检：不能使用 404、跳转页、泛新闻首页、公司首页、产品首页或无法直接解释该术语的链接。链接失效时，优先替换为术语提供方的官方文档、研究页或技术词汇表；其次才使用高校、标准组织或主流技术社区的权威解释。
+展示：一句话解释不加句号；缩写类榜单名称优先用缩写，不在术语列括号里放全拼；官方定义中写出英文全称；关联词必须来自现有术语库或本次 TOP10。
+排序：在满足筛选条件后，再按覆盖来源数、出现频次、来源权威度、出现位置与术语属性五项综合排序，并归一化为 60-100。
 `;
 
 function todayInShanghai() {
@@ -79,6 +87,31 @@ function extractRssItems(xml, source) {
   })).filter((item) => item.title);
 }
 
+function extractHtmlItems(html, source) {
+  const text = String(html || "")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ");
+  const titleMatches = Array.from(text.matchAll(/<(?:h1|h2|h3|a)[^>]*>([\s\S]{8,180}?)<\/(?:h1|h2|h3|a)>/gi));
+  const seen = new Set();
+  return titleMatches
+    .map((match) => decodeEntities(stripHtml(match[1])))
+    .filter((title) => /AI|人工智能|大模型|智能体|Agent|模型|推理|训练|开源|安全|机器人|芯片|算力/i.test(title))
+    .filter((title) => {
+      const key = title.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 25)
+    .map((title) => ({
+      source: source.name,
+      weight: source.weight,
+      title,
+      summary: title,
+      link: source.url
+    }));
+}
+
 async function fetchSource(source) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000);
@@ -91,7 +124,7 @@ async function fetchSource(source) {
     });
     if (!response.ok) return [];
     const text = await response.text();
-    return extractRssItems(text, source);
+    return source.type === "html" ? extractHtmlItems(text, source) : extractRssItems(text, source);
   } catch {
     return [];
   } finally {
@@ -109,6 +142,31 @@ function extractTermsFromText(text) {
   return Array.from(new Set(matches.map((item) => item.replace(/^english:\s*"/, "").replace(/"$/, ""))));
 }
 
+function normalizeTermKey(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, "")
+    .replace(/[\u2010-\u2015]/g, "-")
+    .replace(/[^a-z0-9]+/g, "")
+    .trim();
+}
+
+function buildTermKeySet(terms) {
+  return new Set(terms.map(normalizeTermKey).filter(Boolean));
+}
+
+function findDuplicateLibraryTerms(items, libraryTermKeys) {
+  return items
+    .filter((item) => libraryTermKeys.has(normalizeTermKey(item.english)))
+    .map((item) => item.english);
+}
+
+function createDuplicateError(date, duplicateTerms) {
+  const error = new Error(`${date} 热词与 AI 术语库重复：${duplicateTerms.join(", ")}`);
+  error.duplicateTerms = duplicateTerms;
+  return error;
+}
+
 function extractRecentHotwords(text, limit = 80) {
   return extractTermsFromText(text).slice(-limit);
 }
@@ -124,7 +182,7 @@ function safeJsonParse(text) {
   }
 }
 
-async function callModel({ date, publishedAt, signals, glossaryTerms, recentHotwords }) {
+async function callModel({ date, publishedAt, signals, glossaryTerms, recentHotwords, rejectedTerms = [] }) {
   const apiKey = process.env.OPENAI_API_KEY || process.env.AI_API_KEY || process.env.ZHIPU_API_KEY;
   if (!apiKey) {
     throw new Error("缺少 OPENAI_API_KEY、AI_API_KEY 或 ZHIPU_API_KEY，无法云端生成每日热词");
@@ -140,11 +198,14 @@ async function callModel({ date, publishedAt, signals, glossaryTerms, recentHotw
 
 ${SCORING_RULES}
 
-现有术语库/历史词片段，候选尽量避免重复：
+AI 术语库已有词，以下词绝对禁止进入 TOP10：
 ${glossaryTerms.slice(0, 260).join(", ")}
 
-最近历史热词，重复最多2个：
+最近历史热词，用于做新鲜度轻惩罚；如果今天依然明显更热，可以继续入榜，但不要与前一天高度重合：
 ${recentHotwords.join(", ")}
+
+上一轮因重复被拒绝的候选，本轮必须避开：
+${rejectedTerms.join(", ") || "无"}
 
 近24-72小时多源信号：
 ${sourceBrief}
@@ -195,12 +256,12 @@ ${sourceBrief}
   return safeJsonParse(data.choices?.[0]?.message?.content || "");
 }
 
-function normalizeItems(payload, date) {
+function normalizeItems(payload, date, { libraryTermKeys } = {}) {
   const items = Array.isArray(payload.items) ? payload.items : [];
   if (items.length !== 10) {
     throw new Error(`模型必须返回10个热词，当前为 ${items.length} 个`);
   }
-  return items.map((item, index) => ({
+  const normalizedItems = items.map((item, index) => ({
     rank: index + 1,
     english: String(item.english || "").trim(),
     chinese: String(item.chinese || "").trim(),
@@ -219,6 +280,15 @@ function normalizeItems(payload, date) {
     if (!/^https?:\/\//i.test(item.link)) throw new Error(`${item.english} 链接不是 http/https`);
     return item;
   });
+
+  if (libraryTermKeys) {
+    const duplicateTerms = findDuplicateLibraryTerms(normalizedItems, libraryTermKeys);
+    if (duplicateTerms.length) {
+      throw createDuplicateError(date, duplicateTerms);
+    }
+  }
+
+  return normalizedItems;
 }
 
 function toJsLiteral(value, indent = 10) {
@@ -327,13 +397,32 @@ export default async function handler(request, response) {
       throw new Error(`候选来源抓取不足：${signals.length} 条`);
     }
 
-    const glossaryTerms = Array.from(new Set([
-      ...extractTermsFromText(glossaryData),
-      ...extractTermsFromText(termDetailData)
-    ]));
+    const glossaryTerms = extractTermsFromText(glossaryData);
+    const libraryTermKeys = buildTermKeySet(glossaryTerms);
     const recentHotwords = extractRecentHotwords(termDetailData);
-    const modelPayload = await callModel({ date, publishedAt, signals, glossaryTerms, recentHotwords });
-    const items = normalizeItems(modelPayload, date);
+
+    let items = null;
+    let rejectedTerms = [];
+    let lastError = null;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        const modelPayload = await callModel({ date, publishedAt, signals, glossaryTerms, recentHotwords, rejectedTerms });
+        items = normalizeItems(modelPayload, date, { libraryTermKeys });
+        break;
+      } catch (error) {
+        lastError = error;
+        if (Array.isArray(error.duplicateTerms) && error.duplicateTerms.length) {
+          rejectedTerms = Array.from(new Set([...rejectedTerms, ...error.duplicateTerms]));
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    if (!items) {
+      throw new Error(`连续生成3次仍与 AI 术语库重复，已拒绝发布：${lastError?.message || "未知错误"}`);
+    }
+
     const assets = buildAssets({ date, publishedAt, items, homepage, detail, glossaryData, termDetailData });
 
     response.status(200).json({
